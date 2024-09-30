@@ -1,49 +1,48 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
-import lc from "@/assets/leancloud";
+import { server } from "@/assets/leancloud";
 
-const code = ref("");
-const selected = ref(0);
-const length = ref(0);
-const delay = 1000;
+import type { Ref } from "vue";
+import type { ViewUpdate } from "@codemirror/view";
 
-let lock = false;
-let edited = false;
-let unwatch = () => {};
+const code: Ref<string> = ref("");
+const selected: Ref<number> = ref(0);
+const length: Ref<number> = ref(0);
 
-const update_code = (v) => {
+let edited: boolean = false;
+let unwatch = watch(code, () => {
+    edited = true;
+});
+
+const update = (value: string) => {
     unwatch();
-    code.value = v;
+
+    code.value = value;
+
     unwatch = watch(code, () => {
         edited = true;
     });
 };
 
-const sync = async () => {
-    if (lock) {
-        console.log("Locked, skip clock cycle.");
-        return;
-    }
-    lock = true;
-    if (edited) {
-        console.log("Update to cloud.");
-        edited = false;
-        await lc.update(code.value);
-    } else {
-        console.log("Sync from cloud.");
-        const v = await lc.get();
-        if (v !== code.value) update_code(v);
-    }
-    lock = false;
-};
+onMounted(() => {
+    const remote: Ref<string> = server.ref;
 
-onMounted(async () => {
-    update_code(await lc.get());
-    setInterval(sync, delay);
+    watch(remote, (value) => {
+        if (value !== code.value && !edited) {
+            update(value);
+        }
+    });
+
+    watch(code, (value: string) => {
+        if (edited) {
+            edited = false;
+            server.ref = value;
+        }
+    });
 });
 
-const update_status = (payload) => {
-    const state = payload.view.state;
+const update_status = (viewUpdate: ViewUpdate) => {
+    const state = viewUpdate.view.state;
     const ranges = state.selection.ranges;
     const doc = state.doc;
 
