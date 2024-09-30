@@ -1,10 +1,11 @@
 import { createApp } from "vue";
 import { basicSetup } from "codemirror";
-import App from "./App.vue";
 import VueCodemirror from "vue-codemirror";
 
-import "./assets/style.css";
-import lc from "./assets/leancloud";
+import App from "./App.vue";
+
+import "@/assets/style.css";
+import lc from "@/assets/leancloud";
 
 lc.init();
 

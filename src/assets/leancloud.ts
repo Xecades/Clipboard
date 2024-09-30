@@ -1,3 +1,4 @@
+// @ts-nocheck
 import AV from "leancloud-storage";
 
 const className = "Data";

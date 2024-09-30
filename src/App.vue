@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, watch } from "vue";
-import lc from "./assets/leancloud";
+import lc from "@/assets/leancloud";
 
 const code = ref("");
 const selected = ref(0);
@@ -14,7 +14,9 @@ let unwatch = () => {};
 const update_code = (v) => {
     unwatch();
     code.value = v;
-    unwatch = watch(code, () => { edited = true; });
+    unwatch = watch(code, () => {
+        edited = true;
+    });
 };
 
 const sync = async () => {
@@ -30,8 +32,7 @@ const sync = async () => {
     } else {
         console.log("Sync from cloud.");
         const v = await lc.get();
-        if (v !== code.value)
-            update_code(v);
+        if (v !== code.value) update_code(v);
     }
     lock = false;
 };
@@ -52,10 +53,12 @@ const update_status = (payload) => {
 </script>
 
 <template>
-    <VueCodemirror v-model="code" @update="update_status" style="height: calc(100vh - 1.5rem - 1px); font-size: 1.1rem" />
-    <div id="statusbar">
-        {{ length }} 字符 · {{ selected }} 选中
-    </div>
+    <VueCodemirror
+        v-model="code"
+        @update="update_status"
+        style="height: calc(100vh - 1.5rem - 1px); font-size: 1.1rem"
+    />
+    <div id="statusbar">{{ length }} 字符 · {{ selected }} 选中</div>
 </template>
 
 <style scoped>
@@ -65,8 +68,8 @@ const update_status = (payload) => {
     line-height: 1.5rem;
     background-color: #f5f5f5;
     color: #777777;
-    padding-left: .7rem;
-    font-size: .8rem;
+    padding-left: 0.7rem;
+    font-size: 0.8rem;
     border-top: 1px solid #ddd;
     font-family: monospace;
 }
