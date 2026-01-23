@@ -47,8 +47,6 @@ def main():
 
     # Start server
     print("\nStarting Shared Clipboard server...")
-    print(f"API documentation: http://localhost:{port}/docs")
-    print(f"Application: http://localhost:{port}")
     print()
 
     uvicorn.run(app, host=host, port=port, log_level="info")
