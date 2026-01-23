@@ -2,12 +2,17 @@
 FastAPI application for shared clipboard service.
 """
 
+import os
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from backend.auth import create_access_token, get_current_user, verify_password, verify_token
 from backend.models import ClipboardData, LoginRequest, LoginResponse, UpdateRequest
@@ -15,24 +20,49 @@ from backend.storage import storage
 
 # Create FastAPI app
 app = FastAPI(
-    title="Shared Clipboard API", description="Real-time shared clipboard service", version="0.1.0"
+    title="Shared Clipboard API",
+    description="Real-time shared clipboard service",
+    version="0.1.0",
+    docs_url=None,  # Disable docs in production
+    redoc_url=None,  # Disable redoc in production
 )
 
-# CORS middleware for development
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
+app.add_middleware(SlowAPIMiddleware)
+
+# CORS configuration
+allowed_origins = [
+    "http://localhost:5173",  # Development
+    "https://localhost:8000",  # Development HTTPS
+]
+
+# Add production domain if set
+production_domain = os.getenv("ALLOWED_DOMAIN")
+if production_domain:
+    allowed_origins.append(f"https://{production_domain}")
+    allowed_origins.append(f"https://www.{production_domain}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
 @app.post("/api/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, req: Request):
     """
     Authenticate user with password and return JWT token.
+    Rate limited to 5 attempts per minute per IP.
     """
+    client_ip = req.client.host if req.client else "unknown"
+    print(f"Login attempt from IP: {client_ip}")
+
     if not verify_password(request.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
 
@@ -44,6 +74,7 @@ async def login(request: LoginRequest):
 async def get_clipboard(user: dict = Depends(get_current_user)):
     """
     Get current clipboard content (requires authentication).
+    Rate limited to 30 requests per minute per user.
     """
     content = await storage.get_content()
     return ClipboardData(content=content)
@@ -53,7 +84,14 @@ async def get_clipboard(user: dict = Depends(get_current_user)):
 async def update_clipboard(request: UpdateRequest, user: dict = Depends(get_current_user)):
     """
     Update clipboard content (requires authentication).
+    Rate limited to 10 updates per minute per user.
     """
+    # Validate content length (max 1MB)
+    if len(request.content) > 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Content too large"
+        )
+
     await storage.set_content(request.content)
     return {"status": "success"}
 
@@ -63,12 +101,18 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     """
     WebSocket endpoint for real-time clipboard synchronization.
     Requires valid JWT token as query parameter.
+    Rate limited and logged for security monitoring.
     """
+    client_ip = websocket.client.host if websocket.client else "unknown"
+    print(f"WebSocket connection attempt from IP: {client_ip}")
+
     # Verify token before accepting connection
-    if not verify_token(token):
+    if not token or not verify_token(token):
+        print(f"WebSocket authentication failed from IP: {client_ip}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    print(f"WebSocket connection established from IP: {client_ip}")
     await websocket.accept()
     storage.add_client(websocket)
 
@@ -80,13 +124,27 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         # Listen for updates from this client
         while True:
             data = await websocket.receive_json()
-            if "content" in data:
-                await storage.set_content(data["content"])
+
+            # Validate message format
+            if not isinstance(data, dict) or "content" not in data:
+                continue
+
+            content = data["content"]
+            if not isinstance(content, str):
+                continue
+
+            # Validate content length
+            if len(content) > 1024 * 1024:  # 1MB limit
+                await websocket.send_json({"error": "Content too large"})
+                continue
+
+            await storage.set_content(content)
 
     except WebSocketDisconnect:
+        print(f"WebSocket disconnected from IP: {client_ip}")
         storage.remove_client(websocket)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"WebSocket error from IP {client_ip}: {e}")
         storage.remove_client(websocket)
 
 

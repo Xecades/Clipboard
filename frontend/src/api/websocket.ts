@@ -2,7 +2,9 @@
  * WebSocket client for real-time clipboard synchronization.
  */
 
-const WS_BASE = import.meta.env.DEV ? "ws://localhost:8000/ws" : `ws://${window.location.host}/ws`;
+const WS_BASE = import.meta.env.DEV
+    ? "ws://localhost:8000/ws"
+    : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
 export type MessageHandler = (content: string) => void;
 
