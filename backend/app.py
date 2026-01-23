@@ -55,15 +55,16 @@ app.add_middleware(
 
 
 @app.post("/api/login", response_model=LoginResponse)
-async def login(request: LoginRequest, req: Request):
+@limiter.limit("5/minute")
+async def login(request: Request, data: LoginRequest):
     """
     Authenticate user with password and return JWT token.
     Rate limited to 5 attempts per minute per IP.
     """
-    client_ip = req.client.host if req.client else "unknown"
+    client_ip = request.client.host if request.client else "unknown"
     print(f"Login attempt from IP: {client_ip}")
 
-    if not verify_password(request.password):
+    if not verify_password(data.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
 
     token = create_access_token({"sub": "user"})
@@ -71,7 +72,8 @@ async def login(request: LoginRequest, req: Request):
 
 
 @app.get("/api/clipboard", response_model=ClipboardData)
-async def get_clipboard(user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def get_clipboard(request: Request, user: dict = Depends(get_current_user)):
     """
     Get current clipboard content (requires authentication).
     Rate limited to 30 requests per minute per user.
@@ -81,18 +83,21 @@ async def get_clipboard(user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/clipboard")
-async def update_clipboard(request: UpdateRequest, user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def update_clipboard(
+    request: Request, data: UpdateRequest, user: dict = Depends(get_current_user)
+):
     """
     Update clipboard content (requires authentication).
     Rate limited to 10 updates per minute per user.
     """
     # Validate content length (max 1MB)
-    if len(request.content) > 1024 * 1024:
+    if len(data.content) > 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Content too large"
         )
 
-    await storage.set_content(request.content)
+    await storage.set_content(data.content)
     return {"status": "success"}
 
 
