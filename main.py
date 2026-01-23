@@ -3,10 +3,12 @@ Main entry point for the shared clipboard application.
 Starts the FastAPI server and hosts the frontend static files.
 """
 
+import os
 import sys
 from pathlib import Path
 
 import uvicorn
+from dotenv import load_dotenv
 
 from backend.app import app, mount_static_files
 
@@ -16,6 +18,13 @@ def main():
     Start the application server.
     Hosts both API and frontend static files.
     """
+    # Load environment variables from .env file
+    load_dotenv()
+
+    # Read configuration from environment variables
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+
     # Check if frontend is built
     frontend_dist = Path(__file__).parent / "frontend" / "dist"
 
@@ -38,11 +47,11 @@ def main():
 
     # Start server
     print("\nStarting Shared Clipboard server...")
-    print("API documentation: http://localhost:8000/docs")
-    print("Application: http://localhost:8000")
+    print(f"API documentation: http://localhost:{port}/docs")
+    print(f"Application: http://localhost:{port}")
     print()
 
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

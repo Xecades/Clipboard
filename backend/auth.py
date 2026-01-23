@@ -5,9 +5,13 @@ Authentication and authorization utilities.
 import os
 from datetime import UTC, datetime, timedelta
 
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
