@@ -2,13 +2,21 @@
 Data models for the clipboard application.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginRequest(BaseModel):
     """Login request with password."""
 
-    password: str
+    password: str = Field(..., max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        """Validate password is not empty after stripping."""
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        return v
 
 
 class LoginResponse(BaseModel):
@@ -26,7 +34,7 @@ class ClipboardData(BaseModel):
 class UpdateRequest(BaseModel):
     """Request to update clipboard content."""
 
-    content: str
+    content: str = Field(..., max_length=1024 * 1024)  # 1MB limit
 
 
 class StatusResponse(BaseModel):

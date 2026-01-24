@@ -3,6 +3,7 @@ Authentication and authorization utilities.
 """
 
 import os
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from dotenv import load_dotenv
@@ -14,17 +15,34 @@ from jose import JWTError, jwt
 load_dotenv()
 
 # Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+_SECRET_KEY = os.getenv("SECRET_KEY")
+if not _SECRET_KEY:
+    raise ValueError(
+        "SECRET_KEY environment variable is required. "
+        "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
+SECRET_KEY: str = _SECRET_KEY
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
-FIXED_PASSWORD = os.getenv("CLIPBOARD_PASSWORD", "123456")
+
+_FIXED_PASSWORD = os.getenv("CLIPBOARD_PASSWORD")
+if not _FIXED_PASSWORD:
+    raise ValueError(
+        "CLIPBOARD_PASSWORD environment variable is required. "
+        "Please set a strong password in your .env file."
+    )
+FIXED_PASSWORD: str = _FIXED_PASSWORD
 
 security = HTTPBearer()
 
 
 def verify_password(password: str) -> bool:
-    """Verify if the provided password matches the fixed password."""
-    return password == FIXED_PASSWORD
+    """Verify if the provided password matches the fixed password.
+
+    Uses constant-time comparison to prevent timing attacks.
+    """
+    return secrets.compare_digest(password, FIXED_PASSWORD)
 
 
 def create_access_token(data: dict) -> str:
